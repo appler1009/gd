@@ -1,6 +1,6 @@
 # Interactive Git Diff & Commit Message Generation Tool
 
-A high-performance terminal UI for reviewing git changes with a built-in assistant to generate **Conventional Commit** messages using xAI's Grok.
+A terminal UI for reviewing git changes with the ability to generate **Conventional Commit** messages using xAI's Grok.
 
 ## Features
 
