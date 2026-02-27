@@ -46,6 +46,9 @@ To enable watch mode (auto-refresh on file changes):
 Watch mode and git diff arguments can be combined:
 ```gd --watch --staged```
 
+### Staged Mode Hint
+When viewing staged changes (`--staged`), if there are unstaged changes available, a message appears at the bottom showing `[a] stage all` to quickly stage remaining changes with `git add .`
+
 ### Keybindings
 
 | Key | Action |
@@ -53,6 +56,7 @@ Watch mode and git diff arguments can be combined:
 | `s` | Switch to **Side-by-Side** view |
 | `i` | Switch to **Inline** view |
 | `m` | Toggle **Mouse** scrolling (ON/OFF) |
+| `a` | **Stage all** unstaged changes (only in `--staged` mode) |
 | `c` | **Generate Commit Message** (exits in normal mode; loops back in watch mode) |
 | `q` | **Quit** |
 | `↑ / k` | Scroll line up |

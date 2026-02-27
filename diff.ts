@@ -110,9 +110,15 @@ async function main() {
   const args = process.argv.slice(2)
   const watchMode = args.includes("--watch") || args.includes("-w")
   const gitArgs = args.filter(a => a !== "--watch" && a !== "-w")
+  const stagedMode = gitArgs.includes("--staged")
   const diffRes = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
   let currentDiff = diffRes.stdout.trim() || "no changes"
   if (currentDiff === "no changes" && !watchMode) { console.log(currentDiff); return }
+
+  const hasUnstagedChanges = () => {
+    const fullDiffRes = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
+    return (fullDiffRes.stdout.trim() || "").length > 0
+  }
 
   let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false
   const stdin = process.stdin
@@ -130,7 +136,11 @@ async function main() {
     process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
     const watchIndicator = watchMode ? ` [watching]` : ""
-    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator} [c] generate message [q] quit${ANSI.reset}`)
+    let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator} [c] generate message [q] quit${ANSI.reset}`
+    if (stagedMode && hasUnstagedChanges()) {
+      statusBar += `\n${ANSI.yellow}unstaged changes exist • [a] stage all${ANSI.reset}`
+    }
+    process.stdout.write(statusBar)
   }
 
   const refreshDiff = () => {
@@ -190,6 +200,11 @@ async function main() {
         else if (key.name === "m") {
           mouseEnabled = !mouseEnabled
           process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
+          render()
+        }
+        else if (key.name === "a" && stagedMode) {
+          execSync("git add .")
+          refreshDiff()
           render()
         }
         else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
