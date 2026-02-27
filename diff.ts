@@ -127,7 +127,7 @@ async function main() {
     scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - (h - 2))))
     process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
-    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [c] commit [q] quit${ANSI.reset}`)
+    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [c] generate message [q] quit${ANSI.reset}`)
   }
 
   render()
@@ -172,7 +172,7 @@ async function main() {
   const apiKey = process.env.XAI_API_KEY
   if (!apiKey) { console.error("\nError: XAI_API_KEY is not set."); rl.close(); process.exit(1) }
 
-  console.log("\nGenerating conventional commit message with grok-4-1-fast-reasoning...")
+  console.log("\nGenerating conventional commit message...")
   try {
     const res = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",

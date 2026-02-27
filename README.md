@@ -1,6 +1,6 @@
-# Interactive Git Diff & AI Commit Tool
+# Interactive Git Diff & Commit Message Generation Tool
 
-A high-performance terminal UI for reviewing git changes with a built-in AI assistant to generate **Conventional Commit** messages using xAI's Grok.
+A high-performance terminal UI for reviewing git changes with a built-in assistant to generate **Conventional Commit** messages using xAI's Grok.
 
 ## Features
 
@@ -9,29 +9,35 @@ A high-performance terminal UI for reviewing git changes with a built-in AI assi
 * **Visual Dividers**: Clear horizontal dividers between different files in the diff.
 * **Mouse Support**: Scroll through large diffs with your mouse wheel or trackpad.
 * **Line Numbers**: Accurate line numbering preserved in both view modes.
-* **AI Commit**: Press `c` to generate a `type(scope): message` using the `grok-4-1-fast-reasoning` model.
+* **Commit Message Generation**: Press `c` to generate a `type(scope): message` using the `grok-4-1-fast-reasoning` model.
 
 ## Prerequisites
 
 * [Bun](https://bun.sh) runtime installed.
-* An xAI API Key.
+* **An xAI API Key**: This is **only required** if you intend to use the commit message generation feature (`c` key). The viewer itself works entirely offline.
 
-## Setup
+## Setup (macOS)
 
 1. **Set your API Key**:
-   Add this to your `.zshrc` or `.bashrc`:
-   `export XAI_API_KEY="your-xai-api-key-here"`
+   Add this to your `~/.zshrc` (default shell for macOS):
+   `echo 'export XAI_API_KEY="your-xai-api-key-here"' >> ~/.zshrc && source ~/.zshrc`
 
-2. **Alias for convenience (Optional)**:
-   `alias gd='bun /path/to/your/diff.ts'`
+2. **Bundle as a Standalone Binary**:
+   Compile the script into a single executable for faster performance:
+   `bun build ./diff.ts --compile --outfile gd`
+
+3. **Install to System Path**:
+   Move the binary to a directory in your `$PATH` so you can run it from anywhere:
+   `chmod +x gd && sudo mv gd /usr/local/bin/`
 
 ## Usage
 
-Run the script from the root of any git repository:
+Run the tool from the root of any git repository:
 
-```
-bun diff.ts
-```
+```gd```
+
+You can also pass standard git diff arguments:
+```gd --cached``` or ```gd src/main.ts```
 
 ### Keybindings
 
@@ -40,7 +46,7 @@ bun diff.ts
 | `s` | Switch to **Side-by-Side** view |
 | `i` | Switch to **Inline** view |
 | `m` | Toggle **Mouse** scrolling (ON/OFF) |
-| `c` | Exit viewer and **Generate AI Commit** |
+| `c` | Exit viewer and **Generate Commit Message** |
 | `q` | **Quit** |
 | `↑/↓` | Scroll line by line |
 | `PgUp/PgDn` | Scroll 20 lines |
@@ -48,7 +54,7 @@ bun diff.ts
 ## Workflow
 
 1. **Review**: Scroll through your staged/unstaged changes.
-2. **Generate**: Hit `c` to trigger the AI reasoning model.
+2. **Generate**: Hit `c` to trigger the reasoning model for a commit message.
 3. **Refine**: Accept the suggested Conventional Commit message, edit it, or cancel.
 
 ## License
