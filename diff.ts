@@ -3,7 +3,6 @@
 import { spawnSync, execSync } from "node:child_process"
 import fs from "node:fs"
 import * as readline from "node:readline/promises"
-import { emitKeypressEvents } from "node:readline"
 import { stdin as input, stdout as output } from "node:process"
 
 const ANSI = {
@@ -197,21 +196,18 @@ async function main() {
     process.stdout.write(statusBar)
   }
 
-  const mouseHandler = (data: Buffer) => {
-    const str = data.toString()
-    const match = str.match(/\x1b\[<(\d+);/)
-    if (match) {
-      // Mouse event detected - consume it to prevent echoing
-      if (mouseEnabled) {
-        if (match[1] === "64") { scrollOffset -= (process.stdout.rows || 24) - 2; render() }
-        else if (match[1] === "65") { scrollOffset += (process.stdout.rows || 24) - 2; render() }
-      }
-      return // Prevent keypress emitter from seeing this
-    }
+  const parseKey = (data: Buffer): { name: string, ctrl?: boolean } | null => {
+    const s = data.toString()
+    if (s === "\x03") return { name: "c", ctrl: true }
+    if (s === "\x02") return { name: "b", ctrl: true }
+    if (s === "\x06") return { name: "f", ctrl: true }
+    if (s === "\x1b[A") return { name: "up" }
+    if (s === "\x1b[B") return { name: "down" }
+    if (s === "\x1b[5~") return { name: "pageup" }
+    if (s === "\x1b[6~") return { name: "pagedown" }
+    if (s.length === 1 && s >= " ") return { name: s }
+    return null
   }
-  stdin.on("data", mouseHandler)
-
-  emitKeypressEvents(stdin)
 
   process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
 
@@ -245,16 +241,30 @@ async function main() {
     wantCommit = false
 
     await new Promise<void>((resolve) => {
-      const handleKeypress = (_, key) => {
+      const handleData = (data: Buffer) => {
+        const s = data.toString()
+        // Consume all mouse SGR events silently
+        if (/\x1b\[</.test(s)) {
+          if (mouseEnabled) {
+            const match = s.match(/\x1b\[<(\d+);\d+;\d+M/)
+            if (match) {
+              const btn = parseInt(match[1])
+              if (btn === 64) { scrollOffset -= 3; render() }
+              else if (btn === 65) { scrollOffset += 3; render() }
+            }
+          }
+          return
+        }
+        const key = parseKey(data)
         if (!key) return
         if (key.name === "q" || (key.ctrl && key.name === "c")) {
           shouldExit = true
-          stdin.removeListener("keypress", handleKeypress)
+          stdin.removeListener("data", handleData)
           resolve()
         }
         else if (key.name === "c") {
           wantCommit = true
-          stdin.removeListener("keypress", handleKeypress)
+          stdin.removeListener("data", handleData)
           resolve()
         }
         else if (key.name === "s") { sideBySide = true; render() }
@@ -279,7 +289,7 @@ async function main() {
         else if (key.name === "pageup" || (key.ctrl && key.name === "b") || key.name === "b") { scrollOffset -= (process.stdout.rows || 24) - 2; render() }
         else if (key.name === "pagedown" || (key.ctrl && key.name === "f") || key.name === "f") { scrollOffset += (process.stdout.rows || 24) - 2; render() }
       }
-      stdin.on("keypress", handleKeypress)
+      stdin.on("data", handleData)
     })
 
     if (!wantCommit) break
@@ -356,7 +366,7 @@ async function main() {
   watcher?.close()
   process.stdout.removeAllListeners("resize")
   stdin.removeAllListeners("data")
-  stdin.removeAllListeners("keypress")
+  stdin.removeAllListeners("data")
   process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
   stdin.setRawMode(false)
   stdin.pause()
