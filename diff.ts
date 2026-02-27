@@ -108,9 +108,11 @@ function formatSideBySide(diffText: string, terminalWidth: number): string[] {
 
 async function main() {
   const args = process.argv.slice(2)
-  const diffRes = spawnSync("git", ["diff", "--color=never", ...args], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
-  const plainDiff = diffRes.stdout.trim() || "no changes"
-  if (plainDiff === "no changes") { console.log(plainDiff); return }
+  const watchMode = args.includes("--watch") || args.includes("-w")
+  const gitArgs = args.filter(a => a !== "--watch" && a !== "-w")
+  const diffRes = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
+  let currentDiff = diffRes.stdout.trim() || "no changes"
+  if (currentDiff === "no changes" && !watchMode) { console.log(currentDiff); return }
 
   let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false
   const stdin = process.stdin
@@ -123,11 +125,33 @@ async function main() {
   const render = () => {
     process.stdout.write(ANSI.clear)
     const w = process.stdout.columns || 130, h = process.stdout.rows || 24
-    const allLines = sideBySide ? formatSideBySide(plainDiff, w) : formatInline(plainDiff, w)
+    const allLines = sideBySide ? formatSideBySide(currentDiff, w) : formatInline(currentDiff, w)
     scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - (h - 2))))
     process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
-    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [c] generate message [q] quit${ANSI.reset}`)
+    const watchIndicator = watchMode ? ` [watching]` : ""
+    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator} [c] generate message [q] quit${ANSI.reset}`)
+  }
+
+  const refreshDiff = () => {
+    const res = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
+    currentDiff = res.stdout.trim() || "no changes"
+  }
+
+  let watcher: fs.FSWatcher | undefined
+  if (watchMode) {
+    const gitRoot = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim()
+    let debounce: ReturnType<typeof setTimeout> | null = null
+    watcher = fs.watch(gitRoot, { recursive: true }, (_event, filename) => {
+      if (!filename) return
+      if (filename.startsWith(".git/") && filename !== ".git/index" && filename !== ".git/HEAD") return
+      if (debounce) clearTimeout(debounce)
+      debounce = setTimeout(() => {
+        refreshDiff()
+        scrollOffset = 0
+        render()
+      }, 150)
+    })
   }
 
   render()
@@ -163,6 +187,7 @@ async function main() {
     })
   })
 
+  watcher?.close()
   process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
   stdin.setRawMode(false)
 
@@ -181,7 +206,7 @@ async function main() {
         model: "grok-4-1-fast-reasoning",
         messages: [
           { role: "system", content: "You are a helpful assistant that generates git commit messages in the Conventional Commits format (type(scope): description). Use feat, fix, docs, style, refactor, test, or chore. Keep it concise." },
-          { role: "user", content: `Generate a conventional commit for this diff:\n${plainDiff.slice(0, 15000)}` }
+          { role: "user", content: `Generate a conventional commit for this diff:\n${currentDiff.slice(0, 15000)}` }
         ],
       }),
     })

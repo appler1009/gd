@@ -9,6 +9,7 @@ A terminal UI for reviewing git changes with the ability to generate **Conventio
 * **Visual Dividers**: Clear horizontal dividers between different files in the diff.
 * **Mouse Support**: Scroll through large diffs with your mouse wheel or trackpad.
 * **Line Numbers**: Accurate line numbering preserved in both view modes.
+* **Watch Mode**: Auto-refreshes the diff whenever files change, using native OS file-system events (zero CPU when idle).
 * **Commit Message Generation**: Press `c` to generate a `type(scope): message` using the `grok-4-1-fast-reasoning` model.
 
 ## Prerequisites
@@ -37,7 +38,13 @@ Run the tool from the root of any git repository:
 ```gd```
 
 You can also pass standard git diff arguments:
-```gd --cached``` or ```gd src/main.ts```
+```gd --staged``` or ```gd src/main.ts```
+
+To enable watch mode (auto-refresh on file changes):
+```gd --watch``` or ```gd -w```
+
+Watch mode and git diff arguments can be combined:
+```gd --watch --staged```
 
 ### Keybindings
 
