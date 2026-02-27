@@ -32,18 +32,18 @@ function cleanHunkHeader(line: string): string {
 
 function formatInline(diffText: string, width: number): string[] {
   const divider = "—".repeat(width)
-  return diffText.split("\n").filter(l => !/^(---|\+\+\+|index)/.test(l)).map((line) => {
+  return diffText.split("\n").filter(l => !/^(---|\+\+\+|index)/.test(l)).flatMap((line) => {
     if (line.startsWith("diff --git")) {
-      return "\n" + ANSI.cyan + divider + "\n" + extractFileName(line) + ANSI.reset
+      return ["", ANSI.cyan + divider + ANSI.reset, ANSI.cyan + extractFileName(line) + ANSI.reset]
     } else if (line.startsWith("@@")) {
       const cleaned = cleanHunkHeader(line)
-      return cleaned ? ANSI.cyan + cleaned + ANSI.reset : ""
+      return cleaned ? [ANSI.cyan + cleaned + ANSI.reset] : []
     } else if (line.startsWith("-")) {
-      return ANSI.red + line + ANSI.reset
+      return [ANSI.red + line + ANSI.reset]
     } else if (line.startsWith("+")) {
-      return ANSI.green + line + ANSI.reset
+      return [ANSI.green + line + ANSI.reset]
     }
-    return line
+    return [line]
   }).filter(l => l !== "")
 }
 
@@ -121,20 +121,46 @@ async function main() {
     return (fullDiffRes.stdout.trim() || "").length > 0
   }
 
-  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false
+  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true
   const stdin = process.stdin
   stdin.setRawMode(true)
   stdin.resume()
 
+  const extractFiles = () =>
+    currentDiff.split("\n")
+      .filter(l => l.startsWith("diff --git"))
+      .map(l => extractFileName(l))
+
   const render = () => {
     process.stdout.write(ANSI.clear)
     const w = process.stdout.columns || 130, h = process.stdout.rows || 24
+
+    // Display file tree if visible
+    let fileTreeHeight = 0
+    if (fileTreeVisible) {
+      const files = extractFiles()
+      if (files.length > 0) {
+        const fileTreeLines = files.slice(0, Math.max(1, h - 5))
+        process.stdout.write(`${ANSI.cyan}Files:${ANSI.reset}\n`)
+        process.stdout.write(fileTreeLines.map((f, i) => {
+          const prefix = i === fileTreeLines.length - 1 ? "└── " : "├── "
+          return ANSI.cyan + prefix + ANSI.reset + f
+        }).join("\n") + "\n")
+        fileTreeHeight = fileTreeLines.length + 1
+      }
+    }
+
+    // Display diff content
     const allLines = sideBySide ? formatSideBySide(currentDiff, w) : formatInline(currentDiff, w)
-    scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - (h - 2))))
-    process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
+    const availableHeight = h - 2 - fileTreeHeight
+    scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - availableHeight)))
+    process.stdout.write(allLines.slice(scrollOffset, scrollOffset + availableHeight).join("\n") + "\n")
+
+    // Display status bar
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
     const watchIndicator = watchMode ? ` [watching]` : ""
-    let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator} [c] generate message [q] quit${ANSI.reset}`
+    const treeIndicator = fileTreeVisible ? " [t]" : ""
+    let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator}${treeIndicator} [c] generate message [q] quit${ANSI.reset}`
     if (stagedMode && hasUnstagedChanges()) {
       statusBar += `\n${ANSI.yellow}unstaged changes exist • [a] stage all${ANSI.reset}`
     }
@@ -211,6 +237,11 @@ async function main() {
         else if (key.name === "a" && stagedMode) {
           execSync("git add .")
           refreshDiff()
+          render()
+        }
+        else if (key.name === "t") {
+          fileTreeVisible = !fileTreeVisible
+          scrollOffset = 0
           render()
         }
         else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
