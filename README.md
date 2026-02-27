@@ -20,17 +20,41 @@ A terminal UI for reviewing git changes with the ability to generate **Conventio
 
 ## Setup (macOS)
 
-1. **Set your API Key**:
+1. **Clone or download the repository** to a directory (e.g., `~/tools/diff`).
+
+2. **Set your API Key**:
    Add this to your `~/.zshrc` (default shell for macOS):
-   ```echo 'export XAI_API_KEY="your-xai-api-key-here"' >> ~/.zshrc && source ~/.zshrc```
+   ```bash
+   export XAI_API_KEY="your-xai-api-key-here"
+   ```
 
-2. **Bundle as a Standalone Binary**:
-   Compile the script into a single executable for faster performance:
-   ```bun build ./diff.ts --compile --outfile gd```
+3. **Create an alias**:
+   Add this to your `~/.zshrc`:
+   ```bash
+   alias gd='bun ~/path/to/diff/diff.ts'
+   ```
+   Replace `~/path/to/diff` with the actual path to your cloned repository.
 
-3. **Install to System Path**:
-   Move the binary to a directory in your `$PATH` so you can run it from anywhere:
-   ```chmod +x gd && sudo mv gd /usr/local/bin/```
+4. **Reload your shell**:
+   ```bash
+   source ~/.zshrc
+   ```
+
+### Alternative: Compile to Standalone Binary
+
+For faster startup (optional), you can compile the script into a standalone binary:
+
+1. **Build the binary**:
+   ```bash
+   bun build ./diff.ts --compile --outfile gd
+   ```
+
+2. **Install to system path**:
+   ```bash
+   chmod +x gd && sudo mv gd /usr/local/bin/
+   ```
+
+Now you can run `gd` directly from anywhere without the `bun` prefix.
 
 ## Usage
 
