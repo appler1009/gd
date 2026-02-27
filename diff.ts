@@ -168,76 +168,117 @@ async function main() {
   }
   stdin.on("data", mouseHandler)
 
-  await new Promise<void>((resolve) => {
-    stdin.on("keypress", (_, key) => {
-      if (!key) return
-      if (key.name === "q" || (key.ctrl && key.name === "c")) resolve()
-      else if (key.name === "c") { wantCommit = true; resolve() }
-      else if (key.name === "s") { sideBySide = true; render() }
-      else if (key.name === "i") { sideBySide = false; render() }
-      else if (key.name === "m") { 
-        mouseEnabled = !mouseEnabled
-        process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
-        render()
+  let shouldExit = false
+  while (!shouldExit) {
+    wantCommit = false
+
+    await new Promise<void>((resolve) => {
+      const handleKeypress = (_, key) => {
+        if (!key) return
+        if (key.name === "q" || (key.ctrl && key.name === "c")) {
+          shouldExit = true
+          stdin.removeListener("keypress", handleKeypress)
+          resolve()
+        }
+        else if (key.name === "c") {
+          wantCommit = true
+          stdin.removeListener("keypress", handleKeypress)
+          resolve()
+        }
+        else if (key.name === "s") { sideBySide = true; render() }
+        else if (key.name === "i") { sideBySide = false; render() }
+        else if (key.name === "m") {
+          mouseEnabled = !mouseEnabled
+          process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
+          render()
+        }
+        else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
+        else if (key.name === "down" || key.name === "j") { scrollOffset++; render() }
+        else if (key.name === "pageup" || (key.ctrl && key.name === "b")) { scrollOffset -= 20; render() }
+        else if (key.name === "pagedown" || (key.ctrl && key.name === "f")) { scrollOffset += 20; render() }
       }
-      else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
-      else if (key.name === "down" || key.name === "j") { scrollOffset++; render() }
-      else if (key.name === "pageup" || (key.ctrl && key.name === "b")) { scrollOffset -= 20; render() }
-      else if (key.name === "pagedown" || (key.ctrl && key.name === "f")) { scrollOffset += 20; render() }
+      stdin.on("keypress", handleKeypress)
     })
-  })
+
+    if (!wantCommit) break
+
+    const rl = readline.createInterface({ input, output })
+    const apiKey = process.env.XAI_API_KEY
+    if (!apiKey) { console.error("\nError: XAI_API_KEY is not set."); rl.close(); shouldExit = true; continue }
+
+    console.log("\nGenerating conventional commit message...")
+    try {
+      const res = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "grok-4-1-fast-reasoning",
+          messages: [
+            { role: "system", content: "You are a helpful assistant that generates git commit messages in the Conventional Commits format (type(scope): description). Use feat, fix, docs, style, refactor, test, or chore. Keep it concise." },
+            { role: "user", content: `Generate a conventional commit for this diff:\n${currentDiff.slice(0, 15000)}` }
+          ],
+        }),
+      })
+
+      const data = await res.json()
+      if (data.error) {
+        console.error(`\nAPI Error: ${data.error.message || JSON.stringify(data.error)}`)
+        rl.close()
+        shouldExit = true
+        continue
+      }
+
+      let msg = data.choices?.[0]?.message?.content?.trim() || ""
+      if (!msg) {
+        console.error("\nCould not generate a message. Check your API usage/quota.")
+        rl.close()
+        shouldExit = true
+        continue
+      }
+
+      console.log(`\nSuggested message:\n${msg}`)
+      const action = await rl.question("\ncommit? (y/n/edit): ")
+      if (action === "edit") msg = await rl.question("New message: ")
+      rl.close()
+
+      if (action === "n" || !msg) {
+        if (watchMode) {
+          refreshDiff()
+          scrollOffset = 0
+          render()
+          continue
+        } else {
+          shouldExit = true
+          continue
+        }
+      }
+
+      const path = `/tmp/msg-${Date.now()}.txt`
+      fs.writeFileSync(path, msg)
+      try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
+
+      if (watchMode) {
+        refreshDiff()
+        scrollOffset = 0
+        render()
+      } else {
+        shouldExit = true
+      }
+    } catch (err) {
+      console.error(`\nFailed to reach xAI: ${err.message}`)
+      rl.close()
+      shouldExit = true
+    }
+  }
 
   watcher?.close()
+  process.stdout.removeAllListeners("resize")
+  stdin.removeAllListeners("data")
+  stdin.removeAllListeners("keypress")
   process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
   stdin.setRawMode(false)
-
-  if (!wantCommit) process.exit(0)
-
-  const rl = readline.createInterface({ input, output })
-  const apiKey = process.env.XAI_API_KEY
-  if (!apiKey) { console.error("\nError: XAI_API_KEY is not set."); rl.close(); process.exit(1) }
-
-  console.log("\nGenerating conventional commit message...")
-  try {
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "grok-4-1-fast-reasoning",
-        messages: [
-          { role: "system", content: "You are a helpful assistant that generates git commit messages in the Conventional Commits format (type(scope): description). Use feat, fix, docs, style, refactor, test, or chore. Keep it concise." },
-          { role: "user", content: `Generate a conventional commit for this diff:\n${currentDiff.slice(0, 15000)}` }
-        ],
-      }),
-    })
-
-    const data = await res.json()
-    if (data.error) {
-      console.error(`\nAPI Error: ${data.error.message || JSON.stringify(data.error)}`)
-      rl.close()
-      process.exit(1)
-    }
-
-    let msg = data.choices?.[0]?.message?.content?.trim() || ""
-    if (!msg) {
-      console.error("\nCould not generate a message. Check your API usage/quota.")
-      rl.close()
-      process.exit(1)
-    }
-
-    console.log(`\nSuggested message:\n${msg}`)
-    const action = await rl.question("\ncommit? (y/n/edit): ")
-    if (action === "edit") msg = await rl.question("New message: ")
-    rl.close()
-
-    if (action === "n" || !msg) process.exit(0)
-    const path = `/tmp/msg-${Date.now()}.txt`
-    fs.writeFileSync(path, msg)
-    try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
-  } catch (err) {
-    console.error(`\nFailed to reach xAI: ${err.message}`)
-    rl.close()
-  }
+  stdin.pause()
+  process.exit(0)
 }
 
 main().catch(console.error)

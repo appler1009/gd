@@ -53,7 +53,7 @@ Watch mode and git diff arguments can be combined:
 | `s` | Switch to **Side-by-Side** view |
 | `i` | Switch to **Inline** view |
 | `m` | Toggle **Mouse** scrolling (ON/OFF) |
-| `c` | Exit viewer and **Generate Commit Message** |
+| `c` | **Generate Commit Message** (exits in normal mode; loops back in watch mode) |
 | `q` | **Quit** |
 | `↑ / k` | Scroll line up |
 | `↓ / j` | Scroll line down |
@@ -62,9 +62,16 @@ Watch mode and git diff arguments can be combined:
 
 ## Workflow
 
+### Normal Mode
 1. **Review**: Scroll through your staged/unstaged changes.
 2. **Generate**: Hit `c` to trigger the reasoning model for a commit message.
 3. **Refine**: Accept the suggested Conventional Commit message, edit it, or cancel.
+
+### Watch Mode
+1. **Start watching**: Run with `--watch` or `-w`
+2. **Review**: Changes auto-refresh as you edit files
+3. **Commit anytime**: Press `c` to generate and commit
+4. **Keep watching**: After committing, the viewer refreshes the diff and continues watching for the next changes
 
 ## License
 
