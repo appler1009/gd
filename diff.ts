@@ -156,10 +156,10 @@ async function main() {
         process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
         render()
       }
-      else if (key.name === "up") { scrollOffset--; render() }
-      else if (key.name === "down") { scrollOffset++; render() }
-      else if (key.name === "pageup") { scrollOffset -= 20; render() }
-      else if (key.name === "pagedown") { scrollOffset += 20; render() }
+      else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
+      else if (key.name === "down" || key.name === "j") { scrollOffset++; render() }
+      else if (key.name === "pageup" || (key.ctrl && key.name === "b")) { scrollOffset -= 20; render() }
+      else if (key.name === "pagedown" || (key.ctrl && key.name === "f")) { scrollOffset += 20; render() }
     })
   })
 

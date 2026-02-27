@@ -48,8 +48,10 @@ You can also pass standard git diff arguments:
 | `m` | Toggle **Mouse** scrolling (ON/OFF) |
 | `c` | Exit viewer and **Generate Commit Message** |
 | `q` | **Quit** |
-| `↑/↓` | Scroll line by line |
-| `PgUp/PgDn` | Scroll 20 lines |
+| `↑ / k` | Scroll line up |
+| `↓ / j` | Scroll line down |
+| `PgUp / Ctrl+b` | Scroll page up |
+| `PgDn / Ctrl+f` | Scroll page down |
 
 ## Workflow
 
