@@ -131,6 +131,39 @@ async function main() {
       .filter(l => l.startsWith("diff --git"))
       .map(l => extractFileName(l))
 
+  const renderFileTree = (files: string[]): string[] => {
+    const tree: { [key: string]: any } = {}
+    for (const file of files) {
+      const parts = file.split("/")
+      let node = tree
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        if (i === parts.length - 1) {
+          node[part] = null // leaf (file)
+        } else {
+          if (!node[part]) node[part] = {}
+          node = node[part]
+        }
+      }
+    }
+
+    const lines: string[] = []
+    const renderNode = (node: any, prefix = "") => {
+      const keys = Object.keys(node).sort()
+      keys.forEach((key, idx) => {
+        const isLastKey = idx === keys.length - 1
+        const connector = isLastKey ? "└── " : "├── "
+        lines.push(prefix + connector + key)
+        if (node[key] !== null) {
+          const nextPrefix = prefix + (isLastKey ? "    " : "│   ")
+          renderNode(node[key], nextPrefix)
+        }
+      })
+    }
+    renderNode(tree)
+    return lines
+  }
+
   const render = () => {
     process.stdout.write(ANSI.clear)
     const w = process.stdout.columns || 130, h = process.stdout.rows || 24
@@ -140,13 +173,10 @@ async function main() {
     if (fileTreeVisible) {
       const files = extractFiles()
       if (files.length > 0) {
-        const fileTreeLines = files.slice(0, Math.max(1, h - 5))
+        const treeLines = renderFileTree(files).slice(0, Math.max(1, h - 5))
         process.stdout.write(`${ANSI.cyan}Files:${ANSI.reset}\n`)
-        process.stdout.write(fileTreeLines.map((f, i) => {
-          const prefix = i === fileTreeLines.length - 1 ? "└── " : "├── "
-          return ANSI.cyan + prefix + ANSI.reset + f
-        }).join("\n") + "\n")
-        fileTreeHeight = fileTreeLines.length + 1
+        process.stdout.write(treeLines.map(line => ANSI.cyan + line + ANSI.reset).join("\n") + "\n")
+        fileTreeHeight = treeLines.length + 1
       }
     }
 
