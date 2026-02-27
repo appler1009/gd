@@ -20,15 +20,15 @@ A high-performance terminal UI for reviewing git changes with a built-in assista
 
 1. **Set your API Key**:
    Add this to your `~/.zshrc` (default shell for macOS):
-   `echo 'export XAI_API_KEY="your-xai-api-key-here"' >> ~/.zshrc && source ~/.zshrc`
+   ```echo 'export XAI_API_KEY="your-xai-api-key-here"' >> ~/.zshrc && source ~/.zshrc```
 
 2. **Bundle as a Standalone Binary**:
    Compile the script into a single executable for faster performance:
-   `bun build ./diff.ts --compile --outfile gd`
+   ```bun build ./diff.ts --compile --outfile gd```
 
 3. **Install to System Path**:
    Move the binary to a directory in your `$PATH` so you can run it from anywhere:
-   `chmod +x gd && sudo mv gd /usr/local/bin/`
+   ```chmod +x gd && sudo mv gd /usr/local/bin/```
 
 ## Usage
 
