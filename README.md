@@ -7,8 +7,8 @@ A terminal UI for reviewing git changes with the ability to generate **Conventio
 * **Dual View Modes**: Toggle between side-by-side and inline diffs.
 * **Clean UI**: Strips noisy git metadata (hashes, index, range headers) for a source-code-first look.
 * **Visual Dividers**: Clear horizontal dividers between different files in the diff.
-* **File Tree**: Display a list of changed files at the top; toggle visibility with `t`.
-* **Mouse Support**: Scroll through large diffs with your mouse wheel or trackpad.
+* **File Tree**: Display changed files as a directory tree at the top; toggle visibility with `t`.
+* **Mouse Support**: Scroll 3 lines at a time with your mouse wheel or trackpad.
 * **Line Numbers**: Accurate line numbering preserved in both view modes.
 * **Watch Mode**: Auto-refreshes the diff whenever files change, using native OS file-system events (zero CPU when idle).
 * **Commit Message Generation**: Press `c` to generate a `type(scope): message` using the `grok-4-1-fast-reasoning` model.
@@ -89,6 +89,7 @@ When viewing staged changes (`--staged`), if there are unstaged changes availabl
 | `↓ / j` | Scroll line down |
 | `PgUp / b / Ctrl+b` | Scroll page up |
 | `PgDn / f / Ctrl+f` | Scroll page down |
+| Mouse wheel | Scroll 3 lines up/down |
 
 ## Workflow
 

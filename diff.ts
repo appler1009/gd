@@ -241,8 +241,12 @@ async function main() {
     wantCommit = false
 
     await new Promise<void>((resolve) => {
+      let escBuf = ""
       const handleData = (data: Buffer) => {
-        const s = data.toString()
+        const s = escBuf + data.toString()
+        escBuf = ""
+        // Buffer incomplete escape sequences and wait for next chunk
+        if (/^\x1b$|^\x1b\[$|^\x1b\[<[\d;]*$/.test(s)) { escBuf = s; return }
         // Consume all mouse SGR events silently
         if (/\x1b\[</.test(s)) {
           if (mouseEnabled) {
@@ -255,7 +259,7 @@ async function main() {
           }
           return
         }
-        const key = parseKey(data)
+        const key = parseKey(Buffer.from(s))
         if (!key) return
         if (key.name === "q" || (key.ctrl && key.name === "c")) {
           shouldExit = true
@@ -335,6 +339,7 @@ async function main() {
 
       if (action === "n" || !msg) {
         if (watchMode) {
+          stdin.setRawMode(true)
           refreshDiff()
           scrollOffset = 0
           render()
@@ -350,6 +355,7 @@ async function main() {
       try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
 
       if (watchMode) {
+        stdin.setRawMode(true)
         refreshDiff()
         scrollOffset = 0
         render()
@@ -365,7 +371,6 @@ async function main() {
 
   watcher?.close()
   process.stdout.removeAllListeners("resize")
-  stdin.removeAllListeners("data")
   stdin.removeAllListeners("data")
   process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
   stdin.setRawMode(false)
