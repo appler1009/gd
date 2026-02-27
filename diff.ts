@@ -1,0 +1,223 @@
+#!/usr/bin/env bun
+
+import { spawnSync, execSync } from "node:child_process"
+import fs from "node:fs"
+import * as readline from "node:readline/promises"
+import { emitKeypressEvents } from "node:readline"
+import { stdin as input, stdout as output } from "node:process"
+
+const ANSI = {
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  cyan: "\x1b[36m",
+  blue: "\x1b[34m",
+  enterAltBuffer: "\x1b[?1049h",
+  exitAltBuffer: "\x1b[?1049l",
+  hideCursor: "\x1b[?25l",
+  showCursor: "\x1b[?25h",
+  enableMouse: "\x1b[?1000h\x1b[?1006h",
+  disableMouse: "\x1b[?1006l\x1b[?1000l",
+  clear: "\x1b[2J\x1b[H"
+}
+
+function extractFileName(line: string): string {
+  const match = line.match(/^diff --git [ab]\/(.*?) [ab]\/(.*)$/)
+  return match ? match[2] : line
+}
+
+function cleanHunkHeader(line: string): string {
+  return line.replace(/^@@\s-\d+(?:,\d+)?\s\+\d+(?:,\d+)?\s@@\s?/, "").trim()
+}
+
+function formatInline(diffText: string, width: number): string[] {
+  const divider = "—".repeat(width)
+  return diffText.split("\n").filter(l => !/^(---|\+\+\+|index)/.test(l)).map((line) => {
+    if (line.startsWith("diff --git")) {
+      return "\n" + ANSI.cyan + divider + "\n" + extractFileName(line) + ANSI.reset
+    } else if (line.startsWith("@@")) {
+      const cleaned = cleanHunkHeader(line)
+      return cleaned ? ANSI.cyan + cleaned + ANSI.reset : ""
+    } else if (line.startsWith("-")) {
+      return ANSI.red + line + ANSI.reset
+    } else if (line.startsWith("+")) {
+      return ANSI.green + line + ANSI.reset
+    }
+    return line
+  }).filter(l => l !== "")
+}
+
+function formatSideBySide(diffText: string, terminalWidth: number): string[] {
+  const lines = diffText.split("\n")
+  const outputLines: string[] = []
+  const divider = "—".repeat(terminalWidth)
+  let i = 0
+
+  let maxOldLine = 0, maxNewLine = 0
+  for (const line of lines) {
+    const hh = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+    if (hh) {
+      maxOldLine = Math.max(maxOldLine, parseInt(hh[1]) + (hh[2] ? parseInt(hh[2]) : 1))
+      maxNewLine = Math.max(maxNewLine, parseInt(hh[3]) + (hh[4] ? parseInt(hh[4]) : 1))
+    }
+  }
+  
+  const digitsOld = ("" + (maxOldLine || 1)).length
+  const digitsNew = ("" + (maxNewLine || 1)).length
+  const numColWidth = digitsOld + digitsNew + 4
+  const contentW = terminalWidth - numColWidth - 3
+  const leftW = Math.floor(contentW / 2)
+  const rightW = contentW - leftW
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    if (line.startsWith("diff --git")) {
+      outputLines.push("")
+      outputLines.push(ANSI.cyan + divider + ANSI.reset)
+      outputLines.push(ANSI.cyan + extractFileName(line) + ANSI.reset)
+      i++
+      continue
+    }
+
+    if (/^(index|---|\+\+\+)/.test(line)) {
+      i++
+      continue
+    }
+
+    if (line.startsWith("@@")) {
+      const cleaned = cleanHunkHeader(line)
+      if (cleaned) outputLines.push(ANSI.cyan + cleaned + ANSI.reset)
+      
+      const hunkHeader = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
+      let currOld = hunkHeader ? parseInt(hunkHeader[1]) : 1
+      let currNew = hunkHeader ? parseInt(hunkHeader[3]) : 1
+      i++
+
+      while (i < lines.length && !/^(diff --git|@@)/.test(lines[i])) {
+        const curr = lines[i]
+        if (curr.startsWith(" ")) {
+          const content = curr.slice(1)
+          const lNum = ("" + currOld++).padStart(digitsOld)
+          const rNum = ("" + currNew++).padStart(digitsNew)
+          outputLines.push(`${lNum} ${content.slice(0, leftW).padEnd(leftW)} | ${rNum} ${content.slice(0, rightW).padEnd(rightW)}`)
+          i++
+        } else if (curr.startsWith("-") || curr.startsWith("+")) {
+          let d: string[] = [], a: string[] = []
+          while (i < lines.length && lines[i].startsWith("-")) d.push(lines[i++].slice(1))
+          while (i < lines.length && lines[i].startsWith("+")) a.push(lines[i++].slice(1))
+          
+          for (let j = 0; j < Math.max(d.length, a.length); j++) {
+            const dl = d[j] ?? "", ar = a[j] ?? ""
+            const lNum = d[j] !== undefined ? ("" + currOld++).padStart(digitsOld) : " ".repeat(digitsOld)
+            const rNum = a[j] !== undefined ? ("" + currNew++).padStart(digitsNew) : " ".repeat(digitsNew)
+            const leftPart = `${lNum} ${dl ? ANSI.red : ""}${dl.slice(0, leftW).padEnd(leftW)}${ANSI.reset}`
+            const rightPart = `${rNum} ${ar ? ANSI.green : ""}${ar.slice(0, rightW).padEnd(rightW)}${ANSI.reset}`
+            outputLines.push(`${leftPart} | ${rightPart}`)
+          }
+        } else {
+          i++
+        }
+      }
+    } else {
+      i++
+    }
+  }
+  return outputLines
+}
+
+async function main() {
+  const args = process.argv.slice(2)
+  const diffRes = spawnSync("git", ["diff", "--color=never", ...args], { 
+    encoding: "utf8", 
+    maxBuffer: 1024 * 1024 * 50 
+  })
+  const plainDiff = diffRes.stdout.trim() || "no changes"
+  
+  let sideBySide = false, scrollOffset = 0, mouseEnabled = true
+  const stdin = process.stdin
+  emitKeypressEvents(stdin)
+  stdin.setRawMode(true)
+  stdin.resume()
+
+  process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
+
+  const render = () => {
+    process.stdout.write(ANSI.clear)
+    const w = process.stdout.columns || 130, h = process.stdout.rows || 24
+    const allLines = sideBySide ? formatSideBySide(plainDiff, w) : formatInline(plainDiff, w)
+    scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - (h - 2))))
+    process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
+    const mouseStatus = mouseEnabled ? "ON" : "OFF"
+    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [q] quit | Lines: ${allLines.length}${ANSI.reset}`)
+  }
+
+  render()
+  process.stdout.on("resize", render)
+
+  const mouseHandler = (data: Buffer) => {
+    if (!mouseEnabled) return
+    const str = data.toString()
+    const match = str.match(/\x1b\[<(\d+);/)
+    if (match) {
+      if (match[1] === "64") { scrollOffset -= 3; render() }
+      else if (match[1] === "65") { scrollOffset += 3; render() }
+    }
+  }
+  stdin.on("data", mouseHandler)
+
+  await new Promise<void>((resolve) => {
+    const handler = (_: string, key: any) => {
+      if (!key) return
+      if (key.name === "q" || (key.ctrl && key.name === "c")) resolve()
+      else if (key.name === "s") { sideBySide = true; render() }
+      else if (key.name === "i") { sideBySide = false; render() }
+      else if (key.name === "m") { 
+        mouseEnabled = !mouseEnabled
+        process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
+        render()
+      }
+      else if (key.name === "up") { scrollOffset--; render() }
+      else if (key.name === "down") { scrollOffset++; render() }
+      else if (key.name === "pageup") { scrollOffset -= 20; render() }
+      else if (key.name === "pagedown") { scrollOffset += 20; render() }
+    }
+    stdin.on("keypress", handler)
+  })
+
+  process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
+  stdin.setRawMode(false)
+  
+  if (plainDiff === "no changes") process.exit(0)
+
+  const rl = readline.createInterface({ input, output })
+  const choice = await rl.question("\ngenerate commit message? (y/n): ")
+  if (choice.toLowerCase() !== 'y') { rl.close(); return }
+
+  const apiKey = process.env.XAI_API_KEY
+  if (!apiKey) { console.error("XAI_API_KEY missing"); rl.close(); process.exit(1) }
+
+  const res = await fetch("https://api.x.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "grok-beta",
+      messages: [{ role: "user", content: `Generate a conventional commit for this diff:\n${plainDiff.slice(0, 15000)}` }],
+    }),
+  })
+
+  const data = await res.json()
+  let msg = data.choices[0].message.content.trim()
+  console.log(`\nSuggested message:\n${msg}`)
+
+  const action = await rl.question("\ncommit? (y/n/edit): ")
+  if (action === "edit") msg = await rl.question("New message: ")
+  rl.close()
+
+  if (action === "n" || !msg) return
+  const path = `/tmp/msg-${Date.now()}.txt`
+  fs.writeFileSync(path, msg)
+  try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
+}
+
+main().catch(console.error)
