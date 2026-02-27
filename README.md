@@ -61,8 +61,8 @@ When viewing staged changes (`--staged`), if there are unstaged changes availabl
 | `q` | **Quit** |
 | `↑ / k` | Scroll line up |
 | `↓ / j` | Scroll line down |
-| `PgUp / Ctrl+b` | Scroll page up |
-| `PgDn / Ctrl+f` | Scroll page down |
+| `PgUp / b / Ctrl+b` | Scroll page up |
+| `PgDn / f / Ctrl+f` | Scroll page down |
 
 ## Workflow
 

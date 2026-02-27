@@ -10,6 +10,7 @@ const ANSI = {
   reset: "\x1b[0m",
   red: "\x1b[31m",
   green: "\x1b[32m",
+  yellow: "\x1b[33m",
   cyan: "\x1b[36m",
   enterAltBuffer: "\x1b[?1049h",
   exitAltBuffer: "\x1b[?1049l",
@@ -122,11 +123,8 @@ async function main() {
 
   let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false
   const stdin = process.stdin
-  emitKeypressEvents(stdin)
   stdin.setRawMode(true)
   stdin.resume()
-
-  process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
 
   const render = () => {
     process.stdout.write(ANSI.clear)
@@ -142,6 +140,24 @@ async function main() {
     }
     process.stdout.write(statusBar)
   }
+
+  const mouseHandler = (data: Buffer) => {
+    const str = data.toString()
+    const match = str.match(/\x1b\[<(\d+);/)
+    if (match) {
+      // Mouse event detected - consume it to prevent echoing
+      if (mouseEnabled) {
+        if (match[1] === "64") { scrollOffset -= (process.stdout.rows || 24) - 2; render() }
+        else if (match[1] === "65") { scrollOffset += (process.stdout.rows || 24) - 2; render() }
+      }
+      return // Prevent keypress emitter from seeing this
+    }
+  }
+  stdin.on("data", mouseHandler)
+
+  emitKeypressEvents(stdin)
+
+  process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
 
   const refreshDiff = () => {
     const res = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
@@ -167,16 +183,6 @@ async function main() {
   render()
   process.stdout.on("resize", render)
 
-  const mouseHandler = (data: Buffer) => {
-    if (!mouseEnabled) return
-    const str = data.toString()
-    const match = str.match(/\x1b\[<(\d+);/)
-    if (match) {
-      if (match[1] === "64") { scrollOffset -= 3; render() }
-      else if (match[1] === "65") { scrollOffset += 3; render() }
-    }
-  }
-  stdin.on("data", mouseHandler)
 
   let shouldExit = false
   while (!shouldExit) {
@@ -209,8 +215,8 @@ async function main() {
         }
         else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
         else if (key.name === "down" || key.name === "j") { scrollOffset++; render() }
-        else if (key.name === "pageup" || (key.ctrl && key.name === "b")) { scrollOffset -= 20; render() }
-        else if (key.name === "pagedown" || (key.ctrl && key.name === "f")) { scrollOffset += 20; render() }
+        else if (key.name === "pageup" || (key.ctrl && key.name === "b") || key.name === "b") { scrollOffset -= (process.stdout.rows || 24) - 2; render() }
+        else if (key.name === "pagedown" || (key.ctrl && key.name === "f") || key.name === "f") { scrollOffset += (process.stdout.rows || 24) - 2; render() }
       }
       stdin.on("keypress", handleKeypress)
     })
