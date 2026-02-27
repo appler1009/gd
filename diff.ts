@@ -11,7 +11,6 @@ const ANSI = {
   red: "\x1b[31m",
   green: "\x1b[32m",
   cyan: "\x1b[36m",
-  blue: "\x1b[34m",
   enterAltBuffer: "\x1b[?1049h",
   exitAltBuffer: "\x1b[?1049l",
   hideCursor: "\x1b[?25l",
@@ -71,70 +70,49 @@ function formatSideBySide(diffText: string, terminalWidth: number): string[] {
 
   while (i < lines.length) {
     const line = lines[i]
-
     if (line.startsWith("diff --git")) {
-      outputLines.push("")
-      outputLines.push(ANSI.cyan + divider + ANSI.reset)
-      outputLines.push(ANSI.cyan + extractFileName(line) + ANSI.reset)
+      outputLines.push("", ANSI.cyan + divider + ANSI.reset, ANSI.cyan + extractFileName(line) + ANSI.reset)
       i++
       continue
     }
-
-    if (/^(index|---|\+\+\+)/.test(line)) {
-      i++
-      continue
-    }
-
+    if (/^(index|---|\+\+\+)/.test(line)) { i++ ; continue }
     if (line.startsWith("@@")) {
       const cleaned = cleanHunkHeader(line)
       if (cleaned) outputLines.push(ANSI.cyan + cleaned + ANSI.reset)
-      
       const hunkHeader = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/)
       let currOld = hunkHeader ? parseInt(hunkHeader[1]) : 1
       let currNew = hunkHeader ? parseInt(hunkHeader[3]) : 1
       i++
-
       while (i < lines.length && !/^(diff --git|@@)/.test(lines[i])) {
         const curr = lines[i]
         if (curr.startsWith(" ")) {
           const content = curr.slice(1)
-          const lNum = ("" + currOld++).padStart(digitsOld)
-          const rNum = ("" + currNew++).padStart(digitsNew)
-          outputLines.push(`${lNum} ${content.slice(0, leftW).padEnd(leftW)} | ${rNum} ${content.slice(0, rightW).padEnd(rightW)}`)
+          outputLines.push(`${("" + currOld++).padStart(digitsOld)} ${content.slice(0, leftW).padEnd(leftW)} | ${("" + currNew++).padStart(digitsNew)} ${content.slice(0, rightW).padEnd(rightW)}`)
           i++
         } else if (curr.startsWith("-") || curr.startsWith("+")) {
           let d: string[] = [], a: string[] = []
           while (i < lines.length && lines[i].startsWith("-")) d.push(lines[i++].slice(1))
           while (i < lines.length && lines[i].startsWith("+")) a.push(lines[i++].slice(1))
-          
           for (let j = 0; j < Math.max(d.length, a.length); j++) {
             const dl = d[j] ?? "", ar = a[j] ?? ""
             const lNum = d[j] !== undefined ? ("" + currOld++).padStart(digitsOld) : " ".repeat(digitsOld)
             const rNum = a[j] !== undefined ? ("" + currNew++).padStart(digitsNew) : " ".repeat(digitsNew)
-            const leftPart = `${lNum} ${dl ? ANSI.red : ""}${dl.slice(0, leftW).padEnd(leftW)}${ANSI.reset}`
-            const rightPart = `${rNum} ${ar ? ANSI.green : ""}${ar.slice(0, rightW).padEnd(rightW)}${ANSI.reset}`
-            outputLines.push(`${leftPart} | ${rightPart}`)
+            outputLines.push(`${lNum} ${dl ? ANSI.red : ""}${dl.slice(0, leftW).padEnd(leftW)}${ANSI.reset} | ${rNum} ${ar ? ANSI.green : ""}${ar.slice(0, rightW).padEnd(rightW)}${ANSI.reset}`)
           }
-        } else {
-          i++
-        }
+        } else { i++ }
       }
-    } else {
-      i++
-    }
+    } else { i++ }
   }
   return outputLines
 }
 
 async function main() {
   const args = process.argv.slice(2)
-  const diffRes = spawnSync("git", ["diff", "--color=never", ...args], { 
-    encoding: "utf8", 
-    maxBuffer: 1024 * 1024 * 50 
-  })
+  const diffRes = spawnSync("git", ["diff", "--color=never", ...args], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
   const plainDiff = diffRes.stdout.trim() || "no changes"
-  
-  let sideBySide = false, scrollOffset = 0, mouseEnabled = true
+  if (plainDiff === "no changes") { console.log(plainDiff); return }
+
+  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false
   const stdin = process.stdin
   emitKeypressEvents(stdin)
   stdin.setRawMode(true)
@@ -149,7 +127,7 @@ async function main() {
     scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - (h - 2))))
     process.stdout.write(allLines.slice(scrollOffset, scrollOffset + (h - 2)).join("\n") + "\n")
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
-    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [q] quit | Lines: ${allLines.length}${ANSI.reset}`)
+    process.stdout.write(`\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus} [c] commit [q] quit${ANSI.reset}`)
   }
 
   render()
@@ -167,9 +145,10 @@ async function main() {
   stdin.on("data", mouseHandler)
 
   await new Promise<void>((resolve) => {
-    const handler = (_: string, key: any) => {
+    stdin.on("keypress", (_, key) => {
       if (!key) return
       if (key.name === "q" || (key.ctrl && key.name === "c")) resolve()
+      else if (key.name === "c") { wantCommit = true; resolve() }
       else if (key.name === "s") { sideBySide = true; render() }
       else if (key.name === "i") { sideBySide = false; render() }
       else if (key.name === "m") { 
@@ -181,43 +160,59 @@ async function main() {
       else if (key.name === "down") { scrollOffset++; render() }
       else if (key.name === "pageup") { scrollOffset -= 20; render() }
       else if (key.name === "pagedown") { scrollOffset += 20; render() }
-    }
-    stdin.on("keypress", handler)
+    })
   })
 
   process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
   stdin.setRawMode(false)
-  
-  if (plainDiff === "no changes") process.exit(0)
+
+  if (!wantCommit) process.exit(0)
 
   const rl = readline.createInterface({ input, output })
-  const choice = await rl.question("\ngenerate commit message? (y/n): ")
-  if (choice.toLowerCase() !== 'y') { rl.close(); return }
-
   const apiKey = process.env.XAI_API_KEY
-  if (!apiKey) { console.error("XAI_API_KEY missing"); rl.close(); process.exit(1) }
+  if (!apiKey) { console.error("\nError: XAI_API_KEY is not set."); rl.close(); process.exit(1) }
 
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "grok-beta",
-      messages: [{ role: "user", content: `Generate a conventional commit for this diff:\n${plainDiff.slice(0, 15000)}` }],
-    }),
-  })
+  console.log("\nGenerating conventional commit message with grok-4-1-fast-reasoning...")
+  try {
+    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "grok-4-1-fast-reasoning",
+        messages: [
+          { role: "system", content: "You are a helpful assistant that generates git commit messages in the Conventional Commits format (type(scope): description). Use feat, fix, docs, style, refactor, test, or chore. Keep it concise." },
+          { role: "user", content: `Generate a conventional commit for this diff:\n${plainDiff.slice(0, 15000)}` }
+        ],
+      }),
+    })
 
-  const data = await res.json()
-  let msg = data.choices[0].message.content.trim()
-  console.log(`\nSuggested message:\n${msg}`)
+    const data = await res.json()
+    if (data.error) {
+      console.error(`\nAPI Error: ${data.error.message || JSON.stringify(data.error)}`)
+      rl.close()
+      process.exit(1)
+    }
 
-  const action = await rl.question("\ncommit? (y/n/edit): ")
-  if (action === "edit") msg = await rl.question("New message: ")
-  rl.close()
+    let msg = data.choices?.[0]?.message?.content?.trim() || ""
+    if (!msg) {
+      console.error("\nCould not generate a message. Check your API usage/quota.")
+      rl.close()
+      process.exit(1)
+    }
 
-  if (action === "n" || !msg) return
-  const path = `/tmp/msg-${Date.now()}.txt`
-  fs.writeFileSync(path, msg)
-  try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
+    console.log(`\nSuggested message:\n${msg}`)
+    const action = await rl.question("\ncommit? (y/n/edit): ")
+    if (action === "edit") msg = await rl.question("New message: ")
+    rl.close()
+
+    if (action === "n" || !msg) process.exit(0)
+    const path = `/tmp/msg-${Date.now()}.txt`
+    fs.writeFileSync(path, msg)
+    try { execSync(`git commit -F ${path}`, { stdio: "inherit" }) } finally { fs.unlinkSync(path) }
+  } catch (err) {
+    console.error(`\nFailed to reach xAI: ${err.message}`)
+    rl.close()
+  }
 }
 
 main().catch(console.error)
