@@ -332,10 +332,14 @@ async function main() {
       } catch {
         // git push already prints errors to stderr via stdio: "inherit"
       }
-      if (watchMode) {
-        process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
+      process.stdout.write("\npress any key to continue...")
+      await new Promise<void>((resolve) => {
         stdin.setRawMode(true)
         stdin.resume()
+        stdin.once("data", () => resolve())
+      })
+      if (watchMode) {
+        process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
         refreshDiff()
         scrollOffset = 0
         render()
