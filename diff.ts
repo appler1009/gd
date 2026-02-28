@@ -110,6 +110,13 @@ async function main() {
   const args = process.argv.slice(2)
   const watchMode = args.includes("--watch") || args.includes("-w")
   const gitArgs = args.filter(a => a !== "--watch" && a !== "-w")
+
+  let xaiConfig: { key?: string; model?: string } = {}
+  try {
+    xaiConfig = JSON.parse(fs.readFileSync(`${process.env.HOME}/.gd/xai.json`, "utf8"))
+  } catch {}
+  const apiKey = process.env.XAI_API_KEY || xaiConfig.key || ""
+  const xaiModel = process.env.XAI_MODEL || xaiConfig.model || "grok-4-1-fast-reasoning"
   const stagedMode = gitArgs.includes("--staged")
   const diffRes = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
   let currentDiff = diffRes.stdout.trim() || "no changes"
@@ -311,15 +318,15 @@ async function main() {
 
     if (!wantCommit) break
 
-    const apiKey = process.env.XAI_API_KEY
     if (!apiKey) {
+      const msg = "No XAI API key. Set XAI_API_KEY or add \"key\" to ~/.gd/xai.json"
       if (watchMode) {
-        notification = "Error: XAI_API_KEY is not set."
+        notification = msg
         render()
         continue
       }
       process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
-      console.error("Error: XAI_API_KEY is not set.")
+      console.error(msg)
       process.exit(1)
     }
 
@@ -332,7 +339,7 @@ async function main() {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "grok-4-1-fast-reasoning",
+          model: xaiModel,
           messages: [
             { role: "system", content: "You are a helpful assistant that generates git commit messages in the Conventional Commits format (type(scope): description). Use feat, fix, docs, style, refactor, test, or chore. Keep it concise." },
             { role: "user", content: `Generate a conventional commit for this diff:\n${currentDiff.slice(0, 15000)}` }
