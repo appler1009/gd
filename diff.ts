@@ -242,9 +242,10 @@ async function main() {
       if (filename.startsWith(".git/") && filename !== ".git/index" && filename !== ".git/HEAD") return
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => {
-        const prev = currentDiff
+        const prevDiff = currentDiff
+        const prevUnstaged = unstagedChanges
         refreshDiff()
-        if (currentDiff !== prev) {
+        if (currentDiff !== prevDiff || unstagedChanges !== prevUnstaged) {
           scrollOffset = 0
           render()
         }
@@ -355,7 +356,7 @@ async function main() {
         continue
       }
 
-      let msg = data.choices?.[0]?.message?.content?.trim() || ""
+      let msg = (data.choices?.[0]?.message?.content?.trim() || "").replace(/^```[^\n]*\n?/gm, "").replace(/^```$/gm, "").trim()
       if (!msg) {
         console.error("\nCould not generate a message. Check your API usage/quota.")
         rl.close()
