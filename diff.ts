@@ -128,7 +128,7 @@ async function main() {
     unstagedChanges = r.stdout.trim().length > 0
   }
 
-  let sideBySide = false, scrollOffset = 0, maxScroll = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true, notification = ""
+  let sideBySide = false, scrollOffset = 0, maxScroll = 0, mouseEnabled = true, wantCommit = false, wantPush = false, fileTreeVisible = true, notification = ""
   const stdin = process.stdin
   stdin.setRawMode(true)
   stdin.resume()
@@ -198,7 +198,7 @@ async function main() {
     const mouseStatus = mouseEnabled ? "ON" : "OFF"
     const watchIndicator = watchMode ? ` [watching]` : ""
     const treeIndicator = fileTreeVisible ? " [t]" : ""
-    let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator}${treeIndicator} [c] generate message [q] quit${ANSI.reset}`
+    let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator}${treeIndicator} [c] generate message [p] push [q] quit${ANSI.reset}`
     if (notification) {
       statusBar += `\n${ANSI.yellow}${notification}${ANSI.reset}`
       notification = ""
@@ -260,6 +260,7 @@ async function main() {
   let shouldExit = false
   while (!shouldExit) {
     wantCommit = false
+    wantPush = false
 
     await new Promise<void>((resolve) => {
       let escBuf = ""
@@ -292,6 +293,11 @@ async function main() {
           stdin.removeListener("data", handleData)
           resolve()
         }
+        else if (key.name === "p") {
+          wantPush = true
+          stdin.removeListener("data", handleData)
+          resolve()
+        }
         else if (key.name === "s") { sideBySide = true; render() }
         else if (key.name === "i") { sideBySide = false; render() }
         else if (key.name === "m") {
@@ -317,7 +323,28 @@ async function main() {
       stdin.on("data", handleData)
     })
 
-    if (!wantCommit) break
+    if (!wantCommit && !wantPush) break
+
+    if (wantPush) {
+      process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
+      try {
+        execSync("git push", { stdio: "inherit" })
+      } catch {
+        // git push already prints errors to stderr via stdio: "inherit"
+      }
+      if (watchMode) {
+        process.stdout.write(ANSI.enterAltBuffer + ANSI.hideCursor + ANSI.enableMouse)
+        stdin.setRawMode(true)
+        stdin.resume()
+        refreshDiff()
+        scrollOffset = 0
+        render()
+        continue
+      } else {
+        shouldExit = true
+        continue
+      }
+    }
 
     if (!apiKey) {
       const msg = "No XAI API key. Set XAI_API_KEY or add \"key\" to ~/.gd/xai.json"
