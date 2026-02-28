@@ -364,6 +364,7 @@ async function main() {
       if (action === "n" || !msg) {
         if (watchMode) {
           stdin.setRawMode(true)
+          stdin.resume()
           process.stdout.write(ANSI.enableMouse)
           refreshDiff()
           scrollOffset = 0
@@ -381,6 +382,7 @@ async function main() {
 
       if (watchMode) {
         stdin.setRawMode(true)
+        stdin.resume()
         process.stdout.write(ANSI.enableMouse)
         refreshDiff()
         scrollOffset = 0
