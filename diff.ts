@@ -120,7 +120,7 @@ async function main() {
     return (fullDiffRes.stdout.trim() || "").length > 0
   }
 
-  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true
+  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true, notification = ""
   const stdin = process.stdin
   stdin.setRawMode(true)
   stdin.resume()
@@ -190,6 +190,10 @@ async function main() {
     const watchIndicator = watchMode ? ` [watching]` : ""
     const treeIndicator = fileTreeVisible ? " [t]" : ""
     let statusBar = `\r${ANSI.cyan}[s] side [i] inline [m] mouse: ${mouseStatus}${watchIndicator}${treeIndicator} [c] generate message [q] quit${ANSI.reset}`
+    if (notification) {
+      statusBar += `\n${ANSI.yellow}${notification}${ANSI.reset}`
+      notification = ""
+    }
     if (stagedMode && hasUnstagedChanges()) {
       statusBar += `\n${ANSI.yellow}unstaged changes exist • [a] stage all${ANSI.reset}`
     }
@@ -298,9 +302,20 @@ async function main() {
 
     if (!wantCommit) break
 
-    const rl = readline.createInterface({ input, output })
     const apiKey = process.env.XAI_API_KEY
-    if (!apiKey) { console.error("\nError: XAI_API_KEY is not set."); rl.close(); shouldExit = true; continue }
+    if (!apiKey) {
+      if (watchMode) {
+        notification = "Error: XAI_API_KEY is not set."
+        render()
+        continue
+      }
+      process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
+      console.error("Error: XAI_API_KEY is not set.")
+      process.exit(1)
+    }
+
+    process.stdout.write(ANSI.disableMouse)
+    const rl = readline.createInterface({ input, output })
 
     console.log("\nGenerating conventional commit message...")
     try {
@@ -340,6 +355,7 @@ async function main() {
       if (action === "n" || !msg) {
         if (watchMode) {
           stdin.setRawMode(true)
+          process.stdout.write(ANSI.enableMouse)
           refreshDiff()
           scrollOffset = 0
           render()
@@ -356,6 +372,7 @@ async function main() {
 
       if (watchMode) {
         stdin.setRawMode(true)
+        process.stdout.write(ANSI.enableMouse)
         refreshDiff()
         scrollOffset = 0
         render()
