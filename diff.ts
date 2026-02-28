@@ -115,12 +115,13 @@ async function main() {
   let currentDiff = diffRes.stdout.trim() || "no changes"
   if (currentDiff === "no changes" && !watchMode) { console.log(currentDiff); return }
 
-  const hasUnstagedChanges = () => {
-    const fullDiffRes = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
-    return (fullDiffRes.stdout.trim() || "").length > 0
+  let unstagedChanges = false
+  if (stagedMode) {
+    const r = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
+    unstagedChanges = r.stdout.trim().length > 0
   }
 
-  let sideBySide = false, scrollOffset = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true, notification = ""
+  let sideBySide = false, scrollOffset = 0, maxScroll = 0, mouseEnabled = true, wantCommit = false, fileTreeVisible = true, notification = ""
   const stdin = process.stdin
   stdin.setRawMode(true)
   stdin.resume()
@@ -182,7 +183,8 @@ async function main() {
     // Display diff content
     const allLines = sideBySide ? formatSideBySide(currentDiff, w) : formatInline(currentDiff, w)
     const availableHeight = h - 2 - fileTreeHeight
-    scrollOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, allLines.length - availableHeight)))
+    maxScroll = Math.max(0, allLines.length - availableHeight)
+    scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll))
     process.stdout.write(allLines.slice(scrollOffset, scrollOffset + availableHeight).join("\n") + "\n")
 
     // Display status bar
@@ -194,7 +196,7 @@ async function main() {
       statusBar += `\n${ANSI.yellow}${notification}${ANSI.reset}`
       notification = ""
     }
-    if (stagedMode && hasUnstagedChanges()) {
+    if (stagedMode && unstagedChanges) {
       statusBar += `\n${ANSI.yellow}unstaged changes exist • [a] stage all${ANSI.reset}`
     }
     process.stdout.write(statusBar)
@@ -218,6 +220,10 @@ async function main() {
   const refreshDiff = () => {
     const res = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
     currentDiff = res.stdout.trim() || "no changes"
+    if (stagedMode) {
+      const r = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
+      unstagedChanges = r.stdout.trim().length > 0
+    }
   }
 
   let watcher: fs.FSWatcher | undefined
@@ -229,9 +235,12 @@ async function main() {
       if (filename.startsWith(".git/") && filename !== ".git/index" && filename !== ".git/HEAD") return
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => {
+        const prev = currentDiff
         refreshDiff()
-        scrollOffset = 0
-        render()
+        if (currentDiff !== prev) {
+          scrollOffset = 0
+          render()
+        }
       }, 150)
     })
   }
@@ -257,8 +266,8 @@ async function main() {
             const match = s.match(/\x1b\[<(\d+);\d+;\d+M/)
             if (match) {
               const btn = parseInt(match[1])
-              if (btn === 64) { scrollOffset -= 3; render() }
-              else if (btn === 65) { scrollOffset += 3; render() }
+              if (btn === 64) { const p = scrollOffset; scrollOffset = Math.max(0, scrollOffset - 3); if (scrollOffset !== p) render() }
+              else if (btn === 65) { const p = scrollOffset; scrollOffset = Math.min(maxScroll, scrollOffset + 3); if (scrollOffset !== p) render() }
             }
           }
           return
@@ -292,10 +301,10 @@ async function main() {
           scrollOffset = 0
           render()
         }
-        else if (key.name === "up" || key.name === "k") { scrollOffset--; render() }
-        else if (key.name === "down" || key.name === "j") { scrollOffset++; render() }
-        else if (key.name === "pageup" || (key.ctrl && key.name === "b") || key.name === "b") { scrollOffset -= (process.stdout.rows || 24) - 2; render() }
-        else if (key.name === "pagedown" || (key.ctrl && key.name === "f") || key.name === "f") { scrollOffset += (process.stdout.rows || 24) - 2; render() }
+        else if (key.name === "up" || key.name === "k") { const p = scrollOffset; scrollOffset = Math.max(0, scrollOffset - 1); if (scrollOffset !== p) render() }
+        else if (key.name === "down" || key.name === "j") { const p = scrollOffset; scrollOffset = Math.min(maxScroll, scrollOffset + 1); if (scrollOffset !== p) render() }
+        else if (key.name === "pageup" || (key.ctrl && key.name === "b") || key.name === "b") { const p = scrollOffset; scrollOffset = Math.max(0, scrollOffset - ((process.stdout.rows || 24) - 2)); if (scrollOffset !== p) render() }
+        else if (key.name === "pagedown" || (key.ctrl && key.name === "f") || key.name === "f") { const p = scrollOffset; scrollOffset = Math.min(maxScroll, scrollOffset + ((process.stdout.rows || 24) - 2)); if (scrollOffset !== p) render() }
       }
       stdin.on("data", handleData)
     })
