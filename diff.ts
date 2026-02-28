@@ -392,11 +392,12 @@ async function main() {
       }
 
       console.log(`\nSuggested message:\n${msg}`)
-      const action = await rl.question("\ncommit? (y/n/edit): ")
+      const action = await rl.question("\ncommit? (Y/n/edit): ")
       if (action === "edit") msg = await rl.question("New message: ")
       rl.close()
 
-      if (action === "n" || !msg) {
+      const confirmed = action === "" || action === "y" || action === "Y" || action === "edit"
+      if (!confirmed || !msg) {
         if (watchMode) {
           stdin.setRawMode(true)
           stdin.resume()
