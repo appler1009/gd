@@ -122,11 +122,13 @@ async function main() {
   let currentDiff = diffRes.stdout.trim() || "no changes"
   if (currentDiff === "no changes" && !watchMode) { console.log(currentDiff); return }
 
-  let unstagedChanges = false
+  let unstagedChanges = false, untrackedFiles = false
   if (stagedMode) {
     const r = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
     unstagedChanges = r.stdout.trim().length > 0
   }
+  const u = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { encoding: "utf8" })
+  untrackedFiles = u.stdout.trim().length > 0
 
   let sideBySide = false, scrollOffset = 0, maxScroll = 0, mouseEnabled = true, wantCommit = false, wantPush = false, fileTreeVisible = true, notification = ""
   const stdin = process.stdin
@@ -203,8 +205,9 @@ async function main() {
       statusBar += `\n${ANSI.yellow}${notification}${ANSI.reset}`
       notification = ""
     }
-    if (stagedMode && unstagedChanges) {
-      statusBar += `\n${ANSI.yellow}unstaged changes exist • [a] stage all${ANSI.reset}`
+    if (stagedMode && unstagedChanges || untrackedFiles) {
+      const parts = [...(stagedMode && unstagedChanges ? ["unstaged changes"] : []), ...(untrackedFiles ? ["untracked files"] : [])]
+      statusBar += `\n${ANSI.yellow}${parts.join(" & ")} exist • [a] stage all${ANSI.reset}`
     }
     process.stdout.write(statusBar)
   }
@@ -231,6 +234,8 @@ async function main() {
       const r = spawnSync("git", ["diff", "--color=never"], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
       unstagedChanges = r.stdout.trim().length > 0
     }
+    const u = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { encoding: "utf8" })
+    untrackedFiles = u.stdout.trim().length > 0
   }
 
   let watcher: fs.FSWatcher | undefined
@@ -305,7 +310,7 @@ async function main() {
           process.stdout.write(mouseEnabled ? ANSI.enableMouse : ANSI.disableMouse)
           render()
         }
-        else if (key.name === "a" && stagedMode) {
+        else if (key.name === "a" && (stagedMode || untrackedFiles)) {
           execSync("git add .")
           refreshDiff()
           render()
