@@ -328,7 +328,10 @@ async function main() {
     if (wantPush) {
       process.stdout.write(ANSI.disableMouse + ANSI.exitAltBuffer + ANSI.showCursor)
       try {
-        execSync("git push", { stdio: "inherit" })
+        const branch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).stdout.trim()
+        const pushCmd = `git push origin ${branch}`
+        process.stdout.write(`$ ${pushCmd}\n`)
+        execSync(pushCmd, { stdio: "inherit" })
       } catch {
         // git push already prints errors to stderr via stdio: "inherit"
       }
