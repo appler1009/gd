@@ -11,7 +11,7 @@ A terminal UI for reviewing git changes with the ability to generate **Conventio
 * **Mouse Support**: Scroll 3 lines at a time with your mouse wheel or trackpad.
 * **Line Numbers**: Accurate line numbering preserved in both view modes.
 * **Watch Mode**: Auto-refreshes the diff whenever files change, using native OS file-system events (zero CPU when idle).
-* **Commit Message Generation**: Press `c` to generate a `type(scope): message` using the `grok-4-1-fast-reasoning` model.
+* **Commit Message Generation**: Press `c` to generate a `type(scope): message` using the `grok-4.3` model.
 
 ## Prerequisites
 
