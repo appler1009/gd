@@ -116,7 +116,7 @@ async function main() {
     xaiConfig = JSON.parse(fs.readFileSync(`${process.env.HOME}/.gd/xai.json`, "utf8"))
   } catch {}
   const apiKey = process.env.XAI_API_KEY || xaiConfig.key || ""
-  const xaiModel = process.env.XAI_MODEL || xaiConfig.model || "grok-4-1-fast-reasoning"
+  const xaiModel = process.env.XAI_MODEL || xaiConfig.model || "grok-4.3"
   const stagedMode = gitArgs.includes("--staged")
   const diffRes = spawnSync("git", ["diff", "--color=never", ...gitArgs], { encoding: "utf8", maxBuffer: 1024 * 1024 * 50 })
   let currentDiff = diffRes.stdout.trim() || "no changes"
